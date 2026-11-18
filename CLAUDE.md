@@ -139,7 +139,7 @@ Flow: Try git merge → post-merge validation (validator.py) → if issues, send
 
 ## Audit Snapshots
 
-`vit snapshot` (vit/snapshot.py, vit/resolve_connect.py) is a separate, read-only mode for recording what changed on a timeline from outside Resolve. It writes to `timelines/<key>/` and `journal/`, never to `timeline/`, and calls the serializer with `stable_ids=True, media_refs="path", capture_grades=False`. Those options default to the legacy behaviour; don't change the defaults, because the restore path depends on positional IDs and content hashes. **Details:** `@docs/SNAPSHOTS.md`
+`vit snapshot` (vit/snapshot.py, vit/resolve_connect.py) is a separate, read-only mode for recording what changed on a timeline from outside Resolve. It writes to `timelines/<key>/` and `journal/`, never to `timeline/`, and calls the serializer with `stable_ids=True, media_refs="path", capture_grades=False`. Those options default to the legacy behaviour; don't change the defaults, because the restore path depends on positional IDs and content hashes. `vit mcp` (vit/mcp_server.py) serves snapshots to assistants over MCP using only the standard library; keep it dependency-free, and keep everything but protocol messages off stdout. `vit setup` and vit/mcp_config.py produce the `.mcp.json`; `templates/` is generated from `mcp_config.build()` and a test checks they match. **Details:** `@docs/SNAPSHOTS.md`
 
 ---
 

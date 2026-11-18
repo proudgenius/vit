@@ -1,0 +1,34 @@
+{
+  "mcpServers": {
+    "davinci-resolve": {
+      "type": "stdio",
+      "command": "C:\\Program Files\\Blackmagic Design\\DaVinci Resolve\\ResolveMCP.exe",
+      "args": []
+    },
+    "ravenseek": {
+      "type": "stdio",
+      "command": "C:\\Program Files\\RavenSeek\\ravenseek.exe",
+      "args": [
+        "--mcp"
+      ]
+    },
+    "ravenwriter": {
+      "type": "stdio",
+      "command": "<path to RavenWriter: RavenWriter > Settings > AI > Claude > Copy settings>",
+      "args": [
+        "--mcp"
+      ]
+    },
+    "vit": {
+      "type": "stdio",
+      "command": "<path to vit's python: run 'vit setup' to fill this in>",
+      "args": [
+        "-m",
+        "vit",
+        "mcp",
+        "-C",
+        "<path to your vit record folder>"
+      ]
+    }
+  }
+}

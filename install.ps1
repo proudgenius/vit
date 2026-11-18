@@ -1,13 +1,13 @@
 # ---------------------------------------------
 #  Vit Installer -- Git for Video Editing (Windows)
-#  Usage: irm https://raw.githubusercontent.com/LucasHJin/vit/main/install.ps1 | iex
+#  Usage: irm https://raw.githubusercontent.com/proudgenius/vit/main/install.ps1 | iex
 # ---------------------------------------------
 
 $ErrorActionPreference = "Stop"
 
 $VIT_HOME = "$env:USERPROFILE\.vit"
 $VIT_SRC = "$VIT_HOME\vit-src"
-$REPO_URL = "https://github.com/LucasHJin/vit.git"
+$REPO_URL = "https://github.com/proudgenius/vit.git"
 
 Write-Host ""
 Write-Host "  Vit -- Git for Video Editing"
@@ -130,16 +130,17 @@ try {
 # -- Done -------------------------------------
 
 Write-Host ""
-Write-Host "  Vit installed successfully!"
+Write-Host "  Vit installed."
 Write-Host ""
-Write-Host "  Next steps:"
-Write-Host "    1. Restart your terminal"
-Write-Host "    2. Create and open your project in DaVinci Resolve"
-Write-Host "    3. Run: vit init your-project-name (in your terminal)"
-Write-Host "       (creates a vit tracking folder anywhere on disk -- location doesn't matter)"
-Write-Host "    4. Run: vit collab setup"
-Write-Host "       (connect to a GitHub repo so your team can share the project)"
-Write-Host "    5. In Resolve: Workspace > Scripts > Vit"
-Write-Host "       (first launch will ask you to select the vit folder you just created)"
-Write-Host "    6. The panel handles everything from there (save, branch, merge, push, pull)"
+Write-Host "  Setting up the record folder and MCP config..."
+Write-Host ""
+try {
+    & "$VIT_VENV\Scripts\python.exe" -m vit setup "$VIT_HOME\record"
+} catch {
+    Write-Host "  Could not run setup. After restarting your terminal, run: vit setup"
+}
+Write-Host ""
+Write-Host "  For the panel inside Resolve (branch, merge, push, pull):"
+Write-Host "    Workspace > Scripts > Vit. Add AI merge help with:"
+Write-Host "    $VIT_VENV\Scripts\pip.exe install `"$VIT_SRC[all]`""
 Write-Host ""

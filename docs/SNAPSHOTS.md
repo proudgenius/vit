@@ -98,6 +98,45 @@ left staged.
 4. Check `domains_changed` and `diff` against what was intended. If they don't
    match, stop and report.
 
+## MCP server
+
+`vit mcp -C <record folder>` serves the same thing to an assistant over MCP
+(stdin/stdout, standard library only). It creates the record folder if it
+doesn't exist yet.
+
+| Tool | Does |
+|---|---|
+| `snapshot` | Record a timeline from Resolve; returns the commit, domains changed with counts, and the first diff lines, as plain text. Takes `message`, and optionally `timeline`, `journal`, `links`, `color`, `max_lines` |
+| `summary` | One line per clip from the last snapshot; `ref` for an older one |
+| `history` | One line per change, newest first |
+| `diff` | Changes between a commit (`ref`) and the last snapshot |
+| `timelines` | Which timelines have snapshots |
+
+`timeline` can be left out of `summary`, `history` and `diff` when only one
+timeline has snapshots. Only `snapshot` talks to Resolve, and it only reads.
+
+`vit setup [folder]` creates the record folder, checks the connection to
+Resolve, and prints the `.mcp.json` entry with this machine's paths filled in:
+
+```json
+"vit": {
+  "type": "stdio",
+  "command": "/Users/you/.vit/venv/bin/python",
+  "args": ["-m", "vit", "mcp", "-C", "/Users/you/.vit/record"]
+}
+```
+
+`--mcp-json <file>` merges it into an existing config together with entries
+for DaVinci Resolve, RavenSeek and RavenWriter. The file is backed up as
+`<file>.before-vit`, and entries that are already there are left alone.
+RavenWriter's path isn't known to vit: copy it from RavenWriter > Settings >
+AI > Claude > Copy settings. `templates/mcp.<platform>.json` holds the same
+config with placeholders.
+
+One record folder can hold every Resolve project: timelines are filed by
+their unique ID. Two timelines with the same name in different projects have
+to be told apart by key (see `timelines`).
+
 ## Using it as memory
 
 The JSON files are for git and for tools. An assistant should not read them:

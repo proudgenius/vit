@@ -1,0 +1,34 @@
+{
+  "mcpServers": {
+    "davinci-resolve": {
+      "type": "stdio",
+      "command": "/Applications/DaVinci Resolve/DaVinci Resolve.app/Contents/Applications/ResolveMCP",
+      "args": []
+    },
+    "ravenseek": {
+      "type": "stdio",
+      "command": "/Applications/RavenSeek.app/Contents/MacOS/RavenSeek",
+      "args": [
+        "--mcp"
+      ]
+    },
+    "ravenwriter": {
+      "type": "stdio",
+      "command": "<path to RavenWriter: RavenWriter > Settings > AI > Claude > Copy settings>",
+      "args": [
+        "--mcp"
+      ]
+    },
+    "vit": {
+      "type": "stdio",
+      "command": "<path to vit's python: run 'vit setup' to fill this in>",
+      "args": [
+        "-m",
+        "vit",
+        "mcp",
+        "-C",
+        "<path to your vit record folder>"
+      ]
+    }
+  }
+}

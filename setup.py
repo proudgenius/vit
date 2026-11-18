@@ -6,12 +6,14 @@ setup(
     description="Git for Video Editing — version control timeline metadata, not media files",
     packages=find_packages(),
     python_requires=">=3.8",
-    install_requires=[
-        "google-generativeai",
-        "rich",
-        "PySide6",
-    ],
-    extras_require={},
+    # The CLI, snapshots and the MCP server need nothing beyond the standard
+    # library. The extras are for the Gemini merge helper and the Qt panel.
+    install_requires=[],
+    extras_require={
+        "ai": ["google-generativeai"],
+        "qt": ["PySide6"],
+        "all": ["google-generativeai", "PySide6"],
+    },
     entry_points={
         "console_scripts": [
             "vit=vit.cli:main",

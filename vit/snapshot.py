@@ -34,7 +34,7 @@ import re
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
-from .core import GitError, _run, git_config_get, git_show_file
+from .core import GitError, _run, git_config_get, git_init, git_show_file
 from .differ import _frames_to_timecode, format_diff
 from .json_writer import _write_json, read_json
 from .serializer import serialize_timeline
@@ -313,6 +313,20 @@ def _commit(project_dir: str, message: str, paths: List[str]) -> Optional[str]:
     return _run(["rev-parse", "--short", "HEAD"], cwd=project_dir).stdout.strip()
 
 
+def ensure_project(project_dir: str) -> bool:
+    """Make `project_dir` a vit project if it isn't one. Returns True if it was created."""
+    if os.path.isdir(os.path.join(project_dir, ".vit")):
+        return False
+    from .json_writer import write_timeline
+    from .models import Timeline
+
+    git_init(project_dir)
+    write_timeline(project_dir, Timeline())
+    _commit(project_dir, "vit: initial snapshot",
+            [".vit", "timeline", "assets", ".gitignore"])
+    return True
+
+
 def snapshot(project_dir: str, timeline, project, message: str,
              resolve_app=None, color: bool = False, journal=None,
              links: Optional[List[dict]] = None) -> dict:
@@ -406,7 +420,8 @@ def diff_counts(diff_text: str) -> Dict[str, Dict[str, int]]:
     return counts
 
 
-def cap_diff(diff_text: str, max_lines: int) -> Tuple[str, int, bool]:
+def cap_diff(diff_text: str, max_lines: int,
+             hint: str = "use --full") -> Tuple[str, int, bool]:
     """Keep the first max_lines lines of a diff.
 
     Returns (text, total line count, whether it was cut). max_lines <= 0 keeps all.
@@ -416,7 +431,7 @@ def cap_diff(diff_text: str, max_lines: int) -> Tuple[str, int, bool]:
     if max_lines <= 0 or total <= max_lines:
         return "\n".join(lines), total, False
     kept = lines[:max_lines]
-    kept.append(f"  … {total - max_lines} more lines (use --full)")
+    kept.append(f"  … {total - max_lines} more lines ({hint})")
     return "\n".join(kept), total, True
 
 

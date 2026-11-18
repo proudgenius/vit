@@ -458,6 +458,71 @@ def cmd_summary(args):
         sys.exit(1)
 
 
+def cmd_mcp(args):
+    """Run the MCP server on stdin/stdout."""
+    from .mcp_server import serve
+
+    project_dir = (args.project_dir or os.environ.get("VIT_PROJECT_DIR")
+                   or find_project_root())
+    if not project_dir:
+        print("Error: say where the vit record is kept: vit mcp -C <folder>", file=sys.stderr)
+        sys.exit(1)
+    serve(os.path.abspath(os.path.expanduser(project_dir)))
+
+
+def cmd_setup(args):
+    """One step: make the record folder, check Resolve, give the MCP config."""
+    from . import mcp_config
+    from .snapshot import ensure_project
+
+    if args.template:
+        print(mcp_config.to_json(mcp_config.build(platform=args.template)), end="")
+        return
+
+    project_dir = os.path.abspath(os.path.expanduser(
+        args.path or os.environ.get("VIT_PROJECT_DIR") or find_project_root() or os.getcwd()))
+    created = ensure_project(project_dir)
+    print(f"  Record folder: {project_dir}" + ("  (created)" if created else ""))
+
+    try:
+        from .resolve_connect import connect, current_project
+        project = current_project(connect())
+        timeline = project.GetCurrentTimeline()
+        tl_name = f", timeline '{timeline.GetName()}'" if timeline else ", no timeline open"
+        print(f"  Resolve: connected (project '{project.GetName()}'{tl_name})")
+    except Exception as e:
+        print(f"  Resolve: not reachable yet. {e}")
+
+    config = mcp_config.build(python=sys.executable, project_dir=project_dir,
+                              only_vit=args.only_vit)
+    if args.mcp_json:
+        target = os.path.abspath(os.path.expanduser(args.mcp_json))
+        try:
+            written, kept, backup = mcp_config.merge_into(target, config)
+        except (OSError, ValueError) as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+        print(f"  MCP config: {target}")
+        print(f"    wrote: {', '.join(written)}")
+        if kept:
+            print(f"    left as they were: {', '.join(kept)}")
+        if backup:
+            print(f"    backup: {backup}")
+        with open(target) as f:
+            final = json.load(f)
+        todo = mcp_config.placeholders_left({"mcpServers": {
+            k: v for k, v in final["mcpServers"].items() if k in config["mcpServers"]}})
+    else:
+        print("  MCP config (save as .mcp.json in the folder you run Claude Code from,")
+        print("  or re-run with --mcp-json <file> to have it merged in):")
+        print()
+        print(mcp_config.to_json(config))
+        todo = mcp_config.placeholders_left(config)
+    if todo:
+        print(f"  Still to fill in by hand: {', '.join(todo)}")
+    print("  Restart your assistant so it picks up the servers.")
+
+
 def cmd_timelines(args):
     """List the timelines that have snapshots."""
     from .snapshot import read_index
@@ -1049,6 +1114,23 @@ def main():
     p_snap.add_argument("--full", action="store_true", help="Print the whole diff")
     p_snap.add_argument("-C", "--project-dir", help="Vit project (default: cwd or $VIT_PROJECT_DIR)")
     p_snap.set_defaults(func=cmd_snapshot)
+
+    # setup
+    p_setup = subparsers.add_parser(
+        "setup", help="Make the record folder, check Resolve, and give the MCP config")
+    p_setup.add_argument("path", nargs="?", help="Folder for vit's record (default: this project or cwd)")
+    p_setup.add_argument("--mcp-json", metavar="FILE",
+                         help="Merge the servers into this MCP config file (backs it up first)")
+    p_setup.add_argument("--only-vit", action="store_true",
+                         help="Only the vit entry, not Resolve, RavenSeek and RavenWriter")
+    p_setup.add_argument("--template", choices=["windows", "macos", "linux"],
+                         help="Just print the .mcp.json template for a platform")
+    p_setup.set_defaults(func=cmd_setup)
+
+    # mcp
+    p_mcp = subparsers.add_parser("mcp", help="Run the MCP server (stdin/stdout)")
+    p_mcp.add_argument("-C", "--project-dir", help="Folder holding vit's record (or $VIT_PROJECT_DIR)")
+    p_mcp.set_defaults(func=cmd_mcp)
 
     # summary
     p_sum = subparsers.add_parser(

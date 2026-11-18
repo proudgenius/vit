@@ -3,12 +3,12 @@ set -euo pipefail
 
 # ─────────────────────────────────────────────
 #  Vit Installer — Git for Video Editing
-#  Usage: curl -fsSL https://raw.githubusercontent.com/LucasHJin/vit/main/install.sh | bash
+#  Usage: curl -fsSL https://raw.githubusercontent.com/proudgenius/vit/main/install.sh | bash
 # ─────────────────────────────────────────────
 
 VIT_HOME="$HOME/.vit"
 VIT_SRC="$VIT_HOME/vit-src"
-REPO_URL="https://github.com/LucasHJin/vit.git"
+REPO_URL="https://github.com/proudgenius/vit.git"
 
 echo ""
 echo "  Vit — Git for Video Editing"
@@ -111,16 +111,13 @@ fi
 # ── Done ──────────────────────────────────────
 
 echo ""
-echo "  Vit installed successfully!"
+echo "  Vit installed."
 echo ""
-echo "  Next steps:"
-echo "    1. Restart your terminal (or run: source ${SHELL_RC:-~/.bashrc})"
-echo "    2. Create and open your project in DaVinci Resolve"
-echo "    3. Run: vit init your-project-name (in your terminal)"
-echo "       (creates a vit tracking folder anywhere on disk — location doesn't matter)"
-echo "    4. Run: vit collab setup"
-echo "       (connect to a GitHub repo so your team can share the project)"
-echo "    5. In Resolve: Workspace > Scripts > Vit"
-echo "       (first launch will ask you to select the vit folder you just created)"
-echo "    6. The panel handles everything from there (save, branch, merge, push, pull)"
+echo "  Setting up the record folder and MCP config..."
+echo ""
+"$VIT_BIN/vit" setup "$VIT_HOME/record" || true
+echo ""
+echo "  For the panel inside Resolve (branch, merge, push, pull):"
+echo "    Workspace > Scripts > Vit. Add AI merge help with:"
+echo "    $VIT_BIN/pip install \"$VIT_SRC[all]\""
 echo ""

@@ -23,28 +23,45 @@ Different roles edit different files, so Git merges them without conflicts. When
 
 ## Installation
 
-**Requirements:** Python 3.8+, Git, DaVinci Resolve (optional, for Resolve integration)
+**Requirements:** Python 3.8+, Git, DaVinci Resolve (Studio, for anything that talks to Resolve from outside it)
 
-### One-Line Install (macOS/Linux)
+### One-Line Install
+
+macOS / Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/LucasHJin/vit/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/proudgenius/vit/main/install.sh | bash
 ```
+
+Windows (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/proudgenius/vit/main/install.ps1 | iex
+```
+
+The installer puts vit in `~/.vit`, installs the Resolve panel scripts, creates a record folder at `~/.vit/record`, checks whether Resolve is reachable, and prints the MCP config for your assistant. Vit itself has no Python dependencies.
 
 ### Manual Install
 
 ```bash
-git clone https://github.com/LucasHJin/vit.git
+git clone https://github.com/proudgenius/vit.git
 cd vit
 pip install .
-vit install-resolve   # symlink plugin scripts into DaVinci Resolve
+vit install-resolve   # panel scripts for DaVinci Resolve (branch/merge workflow)
+vit setup ~/vit-record   # record folder + Resolve check + MCP config
 ```
 
-For the optional Qt-based GUI panel inside Resolve:
+Optional extras: `pip install ".[qt]"` for the Qt panel, `".[ai]"` for Gemini merge help, `".[all]"` for both.
+
+### Use with an AI assistant (MCP)
+
+`vit setup` prints a ready `.mcp.json` for the four servers that work together: DaVinci Resolve's own MCP, RavenSeek, RavenWriter and vit. To have it merged into an existing config instead (backed up first; entries other setups wrote are kept):
 
 ```bash
-pip install ".[qt]"
+vit setup ~/vit-record --mcp-json /path/to/project/.mcp.json
 ```
+
+Templates with placeholders are in [`templates/`](templates/). See [docs/SNAPSHOTS.md](docs/SNAPSHOTS.md).
 
 ## Usage Guide (GUI — Primary Workflow)
 
