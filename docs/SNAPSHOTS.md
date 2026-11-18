@@ -47,6 +47,14 @@ vit diff --timeline "Promo – rough cut v1"        # disk vs last snapshot
 vit diff HEAD~3 --timeline "Promo – rough cut v1" # disk vs an older commit
 ```
 
+Reading the record back, cheaply:
+
+```bash
+vit summary "Promo – rough cut v1"            # one line per clip
+vit summary "Promo – rough cut v1" a1b2c3d    # as it was at that commit
+vit log --timeline "Promo – rough cut v1"     # one line per change, with domains
+```
+
 `-C <dir>` or `$VIT_PROJECT_DIR` selects the vit project when the working
 directory is somewhere else.
 
@@ -74,6 +82,11 @@ With `--json`:
   that ran and did nothing is still on record.
 - `issues` comes from the validator (overlapping clips, orphaned references).
 
+By default only the first 20 lines of the diff are returned, with per-domain
+counts in `counts` (`{"cuts": {"added": 2, "removed": 0, "changed": 1}}`),
+the full length in `diff_lines`, and `diff_truncated`. `--max-lines N` changes
+the cap; `--full` removes it.
+
 A snapshot commits only its own files. Anything else staged in the repo is
 left staged.
 
@@ -85,6 +98,58 @@ left staged.
 4. Check `domains_changed` and `diff` against what was intended. If they don't
    match, stop and report.
 
+## Using it as memory
+
+The JSON files are for git and for tools. An assistant should not read them:
+on a 100-clip test timeline they come to about 120 KB, against about 6.5 KB
+for `vit summary`. A session can pick up where the last one stopped with:
+
+1. `vit snapshot -m "session start"`: if the editor changed anything by hand
+   since the last snapshot, the diff says exactly what.
+2. `vit log --timeline <name>`: what was done, in order.
+3. `vit summary <name>`: what the cut is now.
+
+```
+Promo – rough cut v1 — 24 fps, 4 video clips, 01:00:00:00–01:00:52:00, 4 audio clips, 1 markers
+V1
+  01:00:00:00–01:00:12:00  SERVICE 3 INTERVIEW.MP4  src 2400–2688  ← scene 1 line 2
+  01:00:12:00–01:00:30:00  SERVICE 3 INTERVIEW.MP4  src 3100–3532  ← scene 1 line 5
+V2
+  01:00:12:12–01:00:15:00  B014_closet_measure.mov  src 24–84  speed 50%
+A1  4 clips
+MARKERS
+  01:00:12:00  Blue  "Covers the jump cut": check the boat isn't too early
+```
+
+## Links
+
+`--links` ties clips on the timeline to things other tools know them by: a
+script scene and line, a search tool's clip id, a note. It takes a JSON list.
+Each entry says which footage it is about and carries whatever is worth
+keeping:
+
+```json
+[
+  {"path": "/Volumes/Media/SERVICE 3 INTERVIEW.MP4",
+   "frames": {"in": 2400, "out": 2688},
+   "clip_id": "a_7c1e", "ref": "scene 1 line 2", "speaker": "Dana"}
+]
+```
+
+- Locating keys: `path` (or `file`, the bare file name), and `frames`
+  `{in, out}` or `start_seconds`/`end_seconds` (with `fps` if the clip's rate
+  differs from the timeline's). These are used for matching and not stored.
+- Everything else is stored as given. `ref` is the one key vit itself uses:
+  `vit summary` prints it after the clip.
+- An entry is matched to the clip from the same file whose source range
+  overlaps it most, so handles and later trims don't break it.
+- The result reports `links: {given, matched, unmatched}`; `unmatched` holds
+  the positions of entries that found no clip.
+
+Links are kept in `timelines/<key>/links.json`, keyed by clip ID. They carry
+over from one snapshot to the next without being passed again, and a clip that
+leaves the timeline takes its link with it (git still has it).
+
 ## Layout
 
 ```
@@ -94,6 +159,7 @@ timelines/
     timeline/             # cuts.json, color.json, audio.json, effects.json,
                           # markers.json, metadata.json, grades/
     assets/manifest.json  # media ref -> original_path, codec, …
+    links.json            # clip id -> outside references (see Links)
 journal/
   <UTC time>-<slug>.json  # {time, message, timeline, timeline_key, entry}
 ```

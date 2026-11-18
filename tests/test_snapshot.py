@@ -333,3 +333,142 @@ def test_find_timeline_by_name_does_not_switch(project_dir):
     assert project.GetCurrentTimeline() is current
     with pytest.raises(SnapshotError):
         find_timeline(project, "Nope")
+
+
+# --- compact views ------------------------------------------------------
+
+from vit.snapshot import cap_diff, diff_counts, summarize_timeline, timeline_log
+
+
+def test_summary_is_one_line_per_clip(project_dir):
+    _, project, timeline = create_test_timeline()
+    key = snapshot(project_dir, timeline, project, "first")["key"]
+    text = summarize_timeline(project_dir, key)
+    lines = text.splitlines()
+
+    assert lines[0].startswith("Main Edit v3 — 24 fps, 2 video clips")
+    assert "  00:00:00:00–00:00:30:00  Interview_A_001  src 100–820" in lines
+    assert "A1  1 clips" in lines
+    # Marker frames are offsets from the 01:00:00:00 start
+    assert any(l.startswith("  01:00:10:00  Blue  \"Fix jump cut\": Transition") for l in lines)
+    assert len(lines) == 1 + 1 + 2 + 1 + 1 + 2
+
+    tl_dir = os.path.join(project_dir, "timelines", key, "timeline")
+    on_disk = sum(os.path.getsize(os.path.join(tl_dir, f)) for f in os.listdir(tl_dir))
+    assert len(text) * 5 < on_disk
+
+
+def test_summary_at_an_older_commit(project_dir):
+    _, project, timeline = create_test_timeline()
+    first = snapshot(project_dir, timeline, project, "first")
+    timeline._video_tracks[1].pop()
+    snapshot(project_dir, timeline, project, "dropped the b-roll")
+
+    key = first["key"]
+    assert "BRoll_001" not in summarize_timeline(project_dir, key)
+    assert "BRoll_001" in summarize_timeline(project_dir, key, ref=first["commit"])
+    with pytest.raises(SnapshotError):
+        summarize_timeline(project_dir, "no-such-key")
+
+
+def test_summary_flags_speed_and_disabled(project_dir):
+    _, project, timeline = create_test_timeline()
+    clip = timeline._video_tracks[1][0]
+    clip.SetProperty("Speed", 50.0)
+    clip.GetClipEnabled = lambda: False
+    key = snapshot(project_dir, timeline, project, "first")["key"]
+    line = [l for l in summarize_timeline(project_dir, key).splitlines()
+            if "Interview_A_001" in l][0]
+    assert "speed 50%" in line and "(disabled)" in line
+
+
+def test_timeline_log_lists_domains_per_commit(project_dir):
+    _, project, v1 = create_test_timeline()
+    other = MockTimeline(name="Other")
+    key = snapshot(project_dir, v1, project, "built")["key"]
+    snapshot(project_dir, other, project, "unrelated timeline")
+    v1._audio_tracks[1][0].SetProperty("Volume", -9.0)
+    snapshot(project_dir, v1, project, "lower level")
+
+    log = timeline_log(project_dir, key)
+    assert [c["message"] for c in log] == ["lower level", "built"]
+    assert log[0]["domains"] == ["audio"]
+    assert log[1]["domains"][0] == "cuts"
+
+
+def test_diff_counts_and_cap(project_dir):
+    _, project, timeline = create_test_timeline()
+    result = snapshot(project_dir, timeline, project, "first")
+    counts = diff_counts(result["diff"])
+    assert counts["cuts"] == {"added": 2, "removed": 0, "changed": 0}
+    assert counts["markers"]["added"] == 2
+
+    shown, total, cut = cap_diff(result["diff"], 5)
+    assert cut and total > 5
+    assert len(shown.splitlines()) == 6 and "more lines" in shown
+    assert cap_diff(result["diff"], 0)[2] is False
+
+
+# --- links --------------------------------------------------------------
+
+from vit.snapshot import read_links
+
+
+def _edit_list():
+    """Shaped like moments from an edit list: where the footage is, plus extras."""
+    return [
+        {"clip_id": "a_7c1e", "path": "/Volumes/Media/Interview_A_001.mov",
+         "frames": {"in": 110, "out": 800}, "start_seconds": 4.6, "end_seconds": 33.3,
+         "ref": "scene 2 line 4", "scene": "2", "line": 4},
+        {"clip_id": "a_f2a6", "path": "/Volumes/Media/BRoll_001.mov",
+         "start_seconds": 0.0, "end_seconds": 10.0, "ref": "scene 2 line 6"},
+        {"clip_id": "a_0000", "path": "/Volumes/Media/Missing.mov",
+         "frames": {"in": 0, "out": 10}, "ref": "scene 9"},
+    ]
+
+
+def test_links_attach_to_clips_and_show_in_summary(project_dir):
+    _, project, timeline = create_test_timeline()
+    result = snapshot(project_dir, timeline, project, "built v1", links=_edit_list())
+
+    assert result["links"] == {"given": 3, "matched": 2, "unmatched": [2]}
+    links = read_links(project_dir, result["key"])
+    ids = _cut_ids(os.path.join(project_dir, "timelines", result["key"]))
+    assert links[ids[0]] == {"clip_id": "a_7c1e", "ref": "scene 2 line 4",
+                             "scene": "2", "line": 4}
+    assert links[ids[1]]["clip_id"] == "a_f2a6"
+
+    summary = summarize_timeline(project_dir, result["key"])
+    assert "Interview_A_001  src 100–820  ← scene 2 line 4" in summary
+    assert f"timelines/{result['key']}/links.json" in _git(
+        project_dir, "show", "--name-only", "HEAD")
+
+
+def test_links_pick_the_overlapping_piece_of_a_file(project_dir):
+    media = MockMediaPoolItem("/Volumes/Media/Interview.mov", frames=9000)
+    early = MockTimelineItem(name="early", start=0, end=100, left_offset=0, media_pool_item=media)
+    late = MockTimelineItem(name="late", start=100, end=200, left_offset=5000, media_pool_item=media)
+    timeline = MockTimeline(name="Two bites", video_tracks={1: [early, late]})
+    _, project, _ = create_test_timeline()
+
+    result = snapshot(project_dir, timeline, project, "v1", links=[
+        {"path": "/Volumes/Media/Interview.mov", "frames": {"in": 4990, "out": 5110},
+         "ref": "the late one"}])
+    ids = _cut_ids(os.path.join(project_dir, "timelines", result["key"]))
+    assert list(read_links(project_dir, result["key"])) == [ids[1]]
+
+
+def test_links_survive_later_snapshots_and_follow_removals(project_dir):
+    _, project, timeline = create_test_timeline()
+    first = snapshot(project_dir, timeline, project, "built v1", links=_edit_list())
+    key = first["key"]
+
+    timeline._audio_tracks[1][0].SetProperty("Volume", -6.0)
+    again = snapshot(project_dir, timeline, project, "level")
+    assert again["links"] is None
+    assert len(read_links(project_dir, key)) == 2
+
+    timeline._video_tracks[1].pop()
+    snapshot(project_dir, timeline, project, "dropped the b-roll")
+    assert len(read_links(project_dir, key)) == 1
+    assert len(read_links(project_dir, key, ref=first["commit"])) == 2

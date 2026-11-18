@@ -162,6 +162,8 @@ vit snapshot -m "before: tighten trims"
 # ... make the change ...
 vit snapshot -m "tighten trims on V1" --journal call.json --json
 vit diff --timeline "Promo – rough cut v1"
+vit summary "Promo – rough cut v1"          # one line per clip
+vit log --timeline "Promo – rough cut v1"   # one line per change
 ```
 
 Needs Resolve Studio with external scripting set to Local. See [docs/SNAPSHOTS.md](docs/SNAPSHOTS.md).

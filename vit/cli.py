@@ -386,13 +386,17 @@ def cmd_snapshot(args):
 
     project_dir = _require_project(args.project_dir)
     try:
+        if args.journal == "-" and args.links == "-":
+            raise OSError("Only one of --journal and --links can read stdin.")
         journal = _read_journal_arg(args.journal)
+        links = _read_journal_arg(args.links)
         resolve = connect()
         project = current_project(resolve)
         timeline = find_timeline(project, args.timeline)
         result = snapshot(
             project_dir, timeline, project, args.message,
             resolve_app=resolve, color=args.color, journal=journal,
+            links=links,
         )
     except (ResolveConnectionError, SnapshotError, OSError) as e:
         if args.json:
@@ -401,7 +405,18 @@ def cmd_snapshot(args):
             print(f"Error: {e}")
         sys.exit(1)
 
+    from .snapshot import cap_diff, diff_counts
+
+    counts = diff_counts(result["diff"])
+    shown, total, cut = cap_diff(result["diff"], 0 if args.full else args.max_lines)
+    # Drop the "Timeline:" header; the caller already has the name
+    shown = "\n".join(l for l in shown.splitlines() if not l.startswith("  Timeline:"))
+
     if args.json:
+        result["counts"] = counts
+        result["diff"] = shown if result["changed"] else ""
+        result["diff_lines"] = total if result["changed"] else 0
+        result["diff_truncated"] = cut
         print(json.dumps(result, indent=2))
         return
 
@@ -411,13 +426,36 @@ def cmd_snapshot(args):
     else:
         print("  Nothing to commit — timeline unchanged.")
     if result["domains_changed"]:
-        print(f"  Changed: {', '.join(result['domains_changed'])}")
-        print()
-        print(result["diff"])
+        parts = []
+        for domain in result["domains_changed"]:
+            c = counts.get(domain, {})
+            detail = " ".join(f"{sym}{c[k]}" for sym, k in
+                              (("+", "added"), ("-", "removed"), ("~", "changed")) if c.get(k))
+            parts.append(f"{domain} ({detail})" if detail else domain)
+        print(f"  Changed: {', '.join(parts)}")
+        print(shown)
     if result["journal"]:
         print(f"  Journal: {result['journal']}")
+    if result["links"]:
+        l = result["links"]
+        print(f"  Links: {l['matched']} of {l['given']} matched a clip")
+        if l["unmatched"]:
+            print(f"  ! No clip for link entries: {l['unmatched']}")
     for issue in result["issues"]:
         print(f"  ! {issue}")
+
+
+def cmd_summary(args):
+    """Print one line per clip for a snapshotted timeline."""
+    from .snapshot import SnapshotError, resolve_key, summarize_timeline
+
+    project_dir = _require_project(args.project_dir)
+    try:
+        key = resolve_key(project_dir, args.timeline)
+        print(summarize_timeline(project_dir, key, ref=args.ref, audio=args.audio))
+    except SnapshotError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
 
 
 def cmd_timelines(args):
@@ -476,8 +514,26 @@ def cmd_diff(args):
 
 def cmd_log(args):
     """Show version history."""
-    project_dir = _require_project()
+    project_dir = _require_project(getattr(args, "project_dir", None))
     count = args.count or 20
+
+    if getattr(args, "timeline", None):
+        from .snapshot import SnapshotError, resolve_key, timeline_log
+        try:
+            key = resolve_key(project_dir, args.timeline)
+        except SnapshotError as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+        commits = timeline_log(project_dir, key, count)
+        if getattr(args, "json", False):
+            print(json.dumps(commits, indent=2))
+            return
+        if not commits:
+            print("  No commits yet.")
+        for c in commits:
+            print(f"{c['hash']}  {c['date']}  [{','.join(c['domains'])}]  {c['message']}")
+        return
+
     output = git_log(project_dir, max_count=count)
     if output:
         print(output)
@@ -948,6 +1004,9 @@ def main():
     p_log = subparsers.add_parser("log", help="Show version history")
     p_log.add_argument("-n", "--count", type=int, help="Max entries (default: 20)")
     p_log.add_argument("--summary", action="store_true", help="Show AI summary of recent commits")
+    p_log.add_argument("--timeline", help="History of one snapshotted timeline (name or key)")
+    p_log.add_argument("--json", action="store_true", help="With --timeline: print as JSON")
+    p_log.add_argument("-C", "--project-dir", help="Vit project (default: cwd or $VIT_PROJECT_DIR)")
     p_log.set_defaults(func=cmd_log)
 
     # status
@@ -981,9 +1040,24 @@ def main():
                         help="Also export a LUT/DRX per clip (switches to the Color page)")
     p_snap.add_argument("--journal", metavar="FILE",
                         help="JSON record of what was asked for; '-' reads stdin")
+    p_snap.add_argument("--links", metavar="FILE",
+                        help="JSON list tying clips to outside references "
+                             "(script lines, clip ids); '-' reads stdin")
     p_snap.add_argument("--json", action="store_true", help="Print the result as JSON")
+    p_snap.add_argument("--max-lines", type=int, default=20,
+                        help="Diff lines to print (default: 20)")
+    p_snap.add_argument("--full", action="store_true", help="Print the whole diff")
     p_snap.add_argument("-C", "--project-dir", help="Vit project (default: cwd or $VIT_PROJECT_DIR)")
     p_snap.set_defaults(func=cmd_snapshot)
+
+    # summary
+    p_sum = subparsers.add_parser(
+        "summary", help="One line per clip for a snapshotted timeline")
+    p_sum.add_argument("timeline", help="Timeline name or key")
+    p_sum.add_argument("ref", nargs="?", help="Summarise the snapshot at this commit (default: latest on disk)")
+    p_sum.add_argument("--audio", action="store_true", help="List audio clips too")
+    p_sum.add_argument("-C", "--project-dir", help="Vit project (default: cwd or $VIT_PROJECT_DIR)")
+    p_sum.set_defaults(func=cmd_summary)
 
     # timelines
     p_tls = subparsers.add_parser("timelines", help="List timelines that have snapshots")
